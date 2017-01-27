@@ -3,33 +3,38 @@ package gosecurefile
 import (
 	"bytes"
 	"crypto/rand"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
-
-	pb "gopkg.in/cheggaaa/pb.v1"
+	"path/filepath"
 
 	tripsec "github.com/dsjr2006/go-triplesec"
+	pb "gopkg.in/cheggaaa/pb.v1"
 
 	"github.com/uber-go/zap"
 )
+
+type TripleSec interface {
+	Target string
+}
 
 var Logger = zap.New(
 	zap.NewJSONEncoder(),
 	zap.DebugLevel,
 ) // Creates new zap logger
 
-func init() {
+// Compress selects compression after encryption default
+var Compress = false
 
-}
-
-func EncryptTripleSec(filepath string, destination string, passphrase []byte) {
+// EncryptTripleSec takes an origin and target string along with a passphrase as a byte array
+func EncryptTripleSec(origin string, target string, passphrase []byte) {
 	// Check passphrase length
 	if len(passphrase) < 12 {
 		Logger.Fatal("Passphrase must be at least 12 chars.")
 	}
 	Logger.Debug("Encrypt Triple Sec Received new file for encryption",
-		zap.String("File", filepath),
+		zap.String("File", origin),
 	)
 
 	// Make Random 16 byte salt
@@ -49,25 +54,44 @@ func EncryptTripleSec(filepath string, destination string, passphrase []byte) {
 	}
 
 	// Open file for reading
-	file, err := os.Open(filepath)
-	fileInfo, err := file.Stat()
-	defer file.Close()
+	file, err := os.Open(origin)
 	if err != nil {
 		Logger.Fatal("Error opening file.",
 			zap.Error(err),
-			zap.String("File", filepath),
+			zap.String("File", origin),
 		)
 	}
-	bar := pb.New64(fileInfo.Size()).SetUnits(pb.U_BYTES)
+	filename := filepath.Base(origin)
+	target = filepath.Join(target, fmt.Sprintf("%s.3c", filename))
+
+	fileinfo, err := file.Stat()
+	if err != nil {
+		Logger.Fatal("Error getting file stats.",
+			zap.Error(err),
+			zap.String("File", origin),
+		)
+	}
+	writer, err := os.Create(target)
+	if err != nil {
+		Logger.Fatal("Error creating file.",
+			zap.Error(err),
+			zap.String("File", target),
+		)
+	}
+
+	defer writer.Close()
+	defer file.Close()
+
+	bar := pb.New64(fileinfo.Size()).SetUnits(pb.U_BYTES)
 	bar.Start()
 
+	// Copy item to buffer
 	buffer := bytes.NewBuffer(nil)
 	if _, err := io.Copy(buffer, file); err != nil {
-		Logger.Fatal("Could not create buffer",
+		Logger.Fatal("Could not copy to buffer",
 			zap.Error(err),
 		)
 	}
-
 	// Encrypt item
 	encryptedItem, err := cipher.Encrypt(buffer.Bytes())
 	if err != nil {
@@ -75,7 +99,8 @@ func EncryptTripleSec(filepath string, destination string, passphrase []byte) {
 			zap.Error(err),
 		)
 	}
-	ioutil.WriteFile(destination, encryptedItem, 0644)
+	ioutil.WriteFile(target, encryptedItem, 0644)
+
 } // Encrypts item at origin to provided destination, requires min char passphrase as []byte
 
 /*
