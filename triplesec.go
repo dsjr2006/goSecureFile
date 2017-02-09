@@ -15,10 +15,6 @@ import (
 	"github.com/uber-go/zap"
 )
 
-type TripleSec interface {
-	Target string
-}
-
 var Logger = zap.New(
 	zap.NewJSONEncoder(),
 	zap.DebugLevel,
@@ -64,13 +60,6 @@ func EncryptTripleSec(origin string, target string, passphrase []byte) {
 	filename := filepath.Base(origin)
 	target = filepath.Join(target, fmt.Sprintf("%s.3c", filename))
 
-	fileinfo, err := file.Stat()
-	if err != nil {
-		Logger.Fatal("Error getting file stats.",
-			zap.Error(err),
-			zap.String("File", origin),
-		)
-	}
 	writer, err := os.Create(target)
 	if err != nil {
 		Logger.Fatal("Error creating file.",
@@ -81,9 +70,6 @@ func EncryptTripleSec(origin string, target string, passphrase []byte) {
 
 	defer writer.Close()
 	defer file.Close()
-
-	bar := pb.New64(fileinfo.Size()).SetUnits(pb.U_BYTES)
-	bar.Start()
 
 	// Copy item to buffer
 	buffer := bytes.NewBuffer(nil)
@@ -100,6 +86,8 @@ func EncryptTripleSec(origin string, target string, passphrase []byte) {
 		)
 	}
 	ioutil.WriteFile(target, encryptedItem, 0644)
+
+	return
 
 } // Encrypts item at origin to provided destination, requires min char passphrase as []byte
 
